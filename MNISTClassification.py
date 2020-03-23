@@ -32,8 +32,8 @@ def loadMatrices(): #Loading images
 
 def main():
     trainX, trainY, testX, testY = loadMatrices()
-    DigitNN = NN(100, 10, 784)
-    DigitNN.train_by_SGD(trainX, trainY, 0.01, 100)
+    DigitNN = NN(200, 10, 784)
+    DigitNN.train_by_SGD(trainX, trainY, regularized = True, dropout = True, save = False)
     DigitNN.test_model(testX, testY)
 
 def plot_comparison(trainX, trainY, testX, testY):

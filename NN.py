@@ -23,62 +23,90 @@ class NN(object):
         self.b1 = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons_l1, 1))
         self.b2 = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons_l2, 1))
     '''
-    Stochastic Gradient Descent algorithm
+    Stochastic Gradient Descent algorithm.
     Inputs:
         - X_train: training input
         - y_train: training output, or matrix of expected outputs
         - learning_rate : learning rate of algorithm
         - epochs: number of epochs
+        - regularized : If regularization is needed
+        - reg_val : value for regularization
+        - dropout : if network is to implement dropout
+        - percent_drop : percent of neurons in hidden layer to be shut down during each epoch
+        - save : specifies whether to save model parameters to a text file
 
     Output:
-        - Void, but we save parameters to a text file
+        - Void
     '''
-    def train_by_SGD(self, X_train, y_train, learning_rate, epochs):
+    def train_by_SGD(self, X_train, y_train, learning_rate = 0.01, epochs = 100, regularized = False, reg_val = 0.01, dropout = False, percent_drop = 0.2, save = True):
         print('Training by SGD')
         for i in range(epochs):
             loss = 0
+            mask = None
+            if dropout:
+                mask = np.random.randint(0, self.num_neurons_l1, size = int(self.num_neurons_l1*percent_drop))
             X_train, y_train = shuffle(X_train, y_train) #Shuffling data to conserve i.i.d
             for k in range(X_train.shape[0]): #looping over m data points
+                if dropout:
+                    self.w1[mask, :] = 0 #Dropping out some paths
                 #Forward passing
                 s1 = self.w1@X_train[k] + self.b1
-                a1 = self.relu(s1)
+                a1 = self.sigmoid(s1)
                 s2 = self.w2@a1 + self.b2
                 a2 = self.softmax(s2)
                 #Back-propagation
                 delta2 = a2 - y_train[k]
                 gradb2 = np.sum(delta2, axis = 0, keepdims = True)
                 gradw2 = delta2@a1.T
-                delta1 = (self.w2.T@delta2)*self.relu_derivative(s1)
+                delta1 = (self.w2.T@delta2)*self.sigmoid_derivative(s1)
                 gradb1 = np.sum(delta1, axis = 0, keepdims = True)
                 gradw1 = delta1@X_train[k].T
+                if regularized:
+                    gradw1 += reg_val*self.w1
+                    gradw2 += reg_val*self.w2
                 #Updatting gradients
-                self.b1 = self.b1 - learning_rate*gradb1
-                self.b2 = self.b2 - learning_rate*gradb2
-                self.w1 = self.w1 - learning_rate*gradw1
-                self.w2 = self.w2 - learning_rate*gradw2
-                #if k == (X_train.shape[0] - 1):
-                #    print('Epoch = %d, Loss = %.4f'%(i, self.loss_function(y_train[k], a2)))
+                self.b1 += -learning_rate*gradb1
+                self.b2 += -learning_rate*gradb2
+                self.w1 += -learning_rate*gradw1
+                self.w2 += -learning_rate*gradw2
+                if k == (X_train.shape[0] - 1):
+                    print('Epoch = %d, Loss = %.4f'%(i, self.loss_function(y_train[k], a2)))
         print('Done training!')
-        self.save_theta() #Saving learned parameters in a file
+        if save:
+            self.save_theta() #Saving learned parameters in a file
     
     '''
     Similar to SGD, but in batches. 
     Batch size MUST be a power of 2 IF possible, due to the size of training sample size, it's default is 10. 
-
+    Inputs:
+        - X_train: training input
+        - y_train: training output, or matrix of expected outputs
+        - learning_rate : learning rate of algorithm
+        - epochs: number of epochs
+        - regularized : If regularization is needed
+        - reg_val : value for regularization
+        - dropout : if network is to implement dropout
+        - percent_drop : percent of neurons in hidden layer to be shut down during each epoch
+        - save : specifies whether to save model parameters to a text file
     Output:
-        - Void, but we save parameters to a text file.
+        - Void
     '''
-    def train_by_MBGD(self, X_train, y_train, learning_rate, epochs, batch_size = 10):
+    def train_by_MBGD(self, X_train, y_train, learning_rate = 0.01, epochs = 100, batch_size = 10, regularized = False, reg_val = 0.01, dropout = False, percent_drop = 0.2, save = True):
         print('Training by Mini Batch SGD')
         for i in range(epochs):
             loss = 0
             X_train, y_train = shuffle(X_train, y_train) #Shuffling data to conserve i.i.d
+            mask = None
+            if dropout:
+                mask = np.random.randint(0, self.num_neurons_l1, size = int(0.2*self.num_neurons_l1))
             for batch in range(int(math.ceil(X_train.shape[0]/batch_size))):
                 gradw1 = 0
                 gradb1 = 0
                 gradw2 = 0
                 gradb2 = 0
                 for k in range(batch_size):
+                    if dropout:
+                        self.w1[mask, :] = 0
                     #Forward passing
                     idx = batch*batch_size + k
                     s1 = self.w1@X_train[idx] + self.b1
@@ -92,15 +120,19 @@ class NN(object):
                     delta1 = (self.w2.T@delta2)*a1*(1-a1)
                     gradb1 += np.sum(delta1, axis = 0, keepdims = True)
                     gradw1 += delta1@X_train[idx].T
-                    #if k == (batch_size - 1) and (batch % 5 == 0):
-                    #    print('Epoch = %d, Batch = %d, Loss = %.4f'%(i, batch, self.loss_function(y_train[idx], a2)))
+                    if regularized:
+                        gradw1 += reg_val*self.w1
+                        gradw2 += reg_val*self.w2
+                    if k == (batch_size - 1) and (batch % 5 == 0):
+                        print('Epoch = %d, Batch = %d, Loss = %.4f'%(i, batch, self.loss_function(y_train[idx], a2)))
                 #Updatting gradients
-                self.b1 = self.b1 - learning_rate*(gradb1/batch_size)
-                self.b2 = self.b2 - learning_rate*(gradb2/batch_size)
-                self.w1 = self.w1 - learning_rate*(gradw1/batch_size)
-                self.w2 = self.w2 - learning_rate*(gradw2/batch_size)
+                self.b1 += - learning_rate*(gradb1/batch_size)
+                self.b2 += - learning_rate*(gradb2/batch_size)
+                self.w1 += - learning_rate*(gradw1/batch_size)
+                self.w2 += - learning_rate*(gradw2/batch_size)
         print('Done Training!')
-        self.save_theta()
+        if save:
+            self.save_theta()
 
     '''
     Runs a test for the model. Please, have common sense and do not use training as testing data.
@@ -120,7 +152,7 @@ class NN(object):
         accuracy_count = 0
         for i in range(testY.shape[0]):
             s1 = self.w1@testX[i] + self.b1
-            a1 = self.relu(s1)
+            a1 = self.sigmoid(s1)
             s2 = self.w2@a1 + self.b2
             a2 = self.softmax(s2)
             a2idx = a2.argmax(axis = 0)

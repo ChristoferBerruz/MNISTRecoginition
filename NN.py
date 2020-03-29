@@ -1,218 +1,97 @@
-import numpy as np
+from GradientDecentType import GradientDecentType
 from sklearn.utils import shuffle
-import math
 class NN(object):
-    """A simple two layer neural network with various activation functions in the hidden layer.
-    The loss is defined as cross-entropy and ouput layer uses a softmax function.
+    """Neural Network"""
 
-    Please note that the activation function in both training and testing MUST be the same.
-    """
-    '''
-    Inputs:
-        - num_neurons_l1 : Number of neurons in hidden layer.
-        - num_neurons_l2 : Number of neurons in output layer.
-        - input_size : size of the input datum, remember that datum is a vector of dim = (input_size, 1)
-    '''
-    def __init__(self, num_neurons_l1, num_neurons_l2, input_size):
-        #Initializing default weights and biases
-        self.num_neurons_l1 = num_neurons_l1
-        self.num_neurons_l2 = num_neurons_l2
-        self.input_size = input_size
-        self.w1 = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons_l1, input_size))
-        self.w2 = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons_l2, num_neurons_l1))
-        self.b1 = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons_l1, 1))
-        self.b2 = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons_l2, 1))
-    '''
-    Stochastic Gradient Descent algorithm.
-    Inputs:
-        - X_train: training input
-        - y_train: training output, or matrix of expected outputs
-        - learning_rate : learning rate of algorithm
-        - epochs: number of epochs
-        - regularized : If regularization is needed
-        - reg_val : value for regularization
-        - dropout : if network is to implement dropout
-        - percent_drop : percent of neurons in hidden layer to be shut down during each epoch
-        - save : specifies whether to save model parameters to a text file
+    def __init__(self, layer_list):
+        """
+        A neural network is a list of layers. With last layer being last_layer = True
 
-    Output:
-        - Void
-    '''
-    def train_by_SGD(self, X_train, y_train, learning_rate = 0.01, epochs = 100, regularized = False, reg_val = 0.01, dropout = False, percent_drop = 0.2, save = True):
-        print('Training by SGD')
-        for i in range(epochs):
-            loss = 0
-            mask = None
-            if dropout:
-                mask = np.random.randint(0, self.num_neurons_l1, size = int(self.num_neurons_l1*percent_drop))
-            X_train, y_train = shuffle(X_train, y_train) #Shuffling data to conserve i.i.d
-            for k in range(X_train.shape[0]): #looping over m data points
-                if dropout:
-                    self.w1[mask, :] = 0 #Dropping out some paths
-                #Forward passing
-                s1 = self.w1@X_train[k] + self.b1
-                a1 = self.sigmoid(s1)
-                s2 = self.w2@a1 + self.b2
-                a2 = self.softmax(s2)
-                #Back-propagation
-                delta2 = a2 - y_train[k]
-                gradb2 = np.sum(delta2, axis = 0, keepdims = True)
-                gradw2 = delta2@a1.T
-                delta1 = (self.w2.T@delta2)*self.sigmoid_derivative(s1)
-                gradb1 = np.sum(delta1, axis = 0, keepdims = True)
-                gradw1 = delta1@X_train[k].T
-                if regularized:
-                    gradw1 += reg_val*self.w1
-                    gradw2 += reg_val*self.w2
-                #Updatting gradients
-                self.b1 += -learning_rate*gradb1
-                self.b2 += -learning_rate*gradb2
-                self.w1 += -learning_rate*gradw1
-                self.w2 += -learning_rate*gradw2
-                if k == (X_train.shape[0] - 1):
-                    print('Epoch = %d, Loss = %.4f'%(i, self.loss_function(y_train[k], a2)))
-        print('Done training!')
-        if save:
-            self.save_theta() #Saving learned parameters in a file
-    
-    '''
-    Similar to SGD, but in batches. 
-    Batch size MUST be a power of 2 IF possible, due to the size of training sample size, it's default is 10. 
-    Inputs:
-        - X_train: training input
-        - y_train: training output, or matrix of expected outputs
-        - learning_rate : learning rate of algorithm
-        - epochs: number of epochs
-        - regularized : If regularization is needed
-        - reg_val : value for regularization
-        - dropout : if network is to implement dropout
-        - percent_drop : percent of neurons in hidden layer to be shut down during each epoch
-        - save : specifies whether to save model parameters to a text file
-    Output:
-        - Void
-    '''
-    def train_by_MBGD(self, X_train, y_train, learning_rate = 0.01, epochs = 100, batch_size = 10, regularized = False, reg_val = 0.01, dropout = False, percent_drop = 0.2, save = True):
-        print('Training by Mini Batch SGD')
-        for i in range(epochs):
-            loss = 0
-            X_train, y_train = shuffle(X_train, y_train) #Shuffling data to conserve i.i.d
-            mask = None
-            if dropout:
-                mask = np.random.randint(0, self.num_neurons_l1, size = int(0.2*self.num_neurons_l1))
-            for batch in range(int(math.ceil(X_train.shape[0]/batch_size))):
-                gradw1 = 0
-                gradb1 = 0
-                gradw2 = 0
-                gradb2 = 0
-                for k in range(batch_size):
-                    if dropout:
-                        self.w1[mask, :] = 0
-                    #Forward passing
-                    idx = batch*batch_size + k
-                    s1 = self.w1@X_train[idx] + self.b1
-                    a1 = self.sigmoid(s1)
-                    s2 = self.w2@a1 + self.b2
-                    a2 = self.softmax(s2)
-                    #Back-propagation
-                    delta2 = a2 - y_train[idx]
-                    gradb2 += np.sum(delta2, axis = 0, keepdims = True)
-                    gradw2 += delta2@a1.T
-                    delta1 = (self.w2.T@delta2)*a1*(1-a1)
-                    gradb1 += np.sum(delta1, axis = 0, keepdims = True)
-                    gradw1 += delta1@X_train[idx].T
-                    if regularized:
-                        gradw1 += reg_val*self.w1
-                        gradw2 += reg_val*self.w2
-                    if k == (batch_size - 1) and (batch % 5 == 0):
-                        print('Epoch = %d, Batch = %d, Loss = %.4f'%(i, batch, self.loss_function(y_train[idx], a2)))
-                #Updatting gradients
-                self.b1 += - learning_rate*(gradb1/batch_size)
-                self.b2 += - learning_rate*(gradb2/batch_size)
-                self.w1 += - learning_rate*(gradw1/batch_size)
-                self.w2 += - learning_rate*(gradw2/batch_size)
-        print('Done Training!')
-        if save:
-            self.save_theta()
-
-    '''
-    Runs a test for the model. Please, have common sense and do not use training as testing data.
-
-    Input:
-        - testX : testing input data
-        - testY : testing expected output
-        - file : bool, True only if training was done prior. Specifies to load parameters from file.
-
-    Output:
-        - accuracy: accuracy between [0, 1] as float
-    '''
-    def test_model(self, testX, testY, file = False):
-        print('Starting testing-----')
-        if file:
-            self.load_theta()
-        accuracy_count = 0
-        for i in range(testY.shape[0]):
-            s1 = self.w1@testX[i] + self.b1
-            a1 = self.sigmoid(s1)
-            s2 = self.w2@a1 + self.b2
-            a2 = self.softmax(s2)
-            a2idx = a2.argmax(axis = 0)
-            if testY[i, a2idx] == 1.0:
-                accuracy_count += 1
-        print('Accuracy: ', accuracy_count/testY.shape[0])
-        return accuracy_count/testY.shape[0]
-    
-    '''
-    Softmax activation function for output layer
-    '''
-    def softmax(self, s2):
-        return np.exp(s2) / np.sum(np.exp(s2))
+        Parameters:
+        - layer_list: list[Layer]
+            Layers to build the network
+        """
+        self.layer_list = layer_list
 
 
-    '''
-    Activation functions and its derivatives for HIDDEN Layer
-    '''
-    def sigmoid(self, s1):
-        return 1/(1+np.exp(-s1))
+    def Train(self, X, Y, GradType = GradientDecentType.STOCHASTIC, batch_size = 10, epochs = 100, learning_rate = 0.01):
+        """
+        Trains the network by Gradient Descent
 
-    def sigmoid_derivative(self, s1):
-        a = self.sigmoid(s1)
-        return a*(1-a)
+        Paremeters:
+        - X: ndarray
+            Training data
+        - Y: ndarray
+            Expected output
+        - GradType: GradientDecentType
+            Specifies which Gradient Descent Variation to use
+        - batch_size: float (optional)
+            Batch size
+        - epochs: int
+            Number of epochs
+        - learning_rate:float
+            Learning rate of algortihm
+        """
+        if(GradType == GradientDecentType.STOCHASTIC):
+            batch_size = 1
+        if(GradType == GradientDecentType.BATCH):
+            batch_size = X.shape[0]
+        self.mini_batch(X, Y, epochs, learning_rate, batch_size)
 
-    def tanh(self, s1):
-        a = np.exp(s1)
-        b = np.exp(-s1)
-        return (a - b)/(a + b)
-    
-    def tanh_derivative(self, s1):
-        return 1 - self.tanh(s1)**2
 
-    def relu(self, s1):
-        return np.where(s1 <= 0, 0, s1)
-    
-    def relu_derivative(self, s1):
-        return np.where(s1> 0, 1, 0)
+    def mini_batch(self, X, y, epochs, learning_rate, batch_size):
+        """
+        All versions of Gradient Descent can be thought as special cases of the Mini-Batch algorithm.
+
+        Parameters:
+        - X: ndarray
+            Training data
+        - y: ndarray
+            Expected outputs
+        - epochs: int
+            Number of epochs
+        - learning_rate: float
+            Learning rate to be used.
+        - batch_size = int
+            Batch size to be used.
+        """
+        last_layer = self.layer_list[-1] #Pointer to last layer
+        for epoch in range(epochs):
+            X, y = shuffle(X, y) #Shuffling data to conserve i.i.d
+            for batch in range(X.shape[0]//batch_size):
+
+                for i in range(batch_size):
+                    idx = batch*batch_size + i
+                    prev_layer_data = X[idx]
+
+                    #Forward passing to all layers
+                    for layer in self.layer_list:
+                        prev_layer_data = layer.forward_pass(prev_layer_data)
+                    
+                    #Back propagation
+                    next_layer_data = y[idx]
+                    expected = y[idx]
+                    for k in range(len(self.layer_list)-1, -1, -1):
+                        layer = self.layer_list[k]
+                        next_layer_data = layer.back_propagate(next_layer_data)
+                        layer.update_gradients()
+
+                    if idx % 100 == 0:
+                        print("Cummulative iteration = %s, Loss = %.7f" % (idx, last_layer.calculate_loss(expected)))
+                for layer in self.layer_list:
+                    layer.update_thetas(learning_rate)
+        print("Done training!")
 
 
-    '''
-    Loss function is cross-entropy
-    '''
-    def loss_function(self, y, s):
-        return np.sum(-y*np.log(s))
-    
-
-    '''
-    Methods for writing and reading to a text file
-    '''
-    def save_theta(self):
-        np.savetxt('w1.txt', self.w1, delimiter = ',')
-        np.savetxt('b1.txt', self.b1, delimiter = ',')
-        np.savetxt('w2.txt', self.w2, delimiter = ',')
-        np.savetxt('b2.txt', self.b2, delimiter = ',')
-
-    def load_theta(self):
-        self.w1 = np.loadtxt('w1.txt', delimiter = ',')
-        self.b1 = np.loadtxt('b1.txt', delimiter = ',')
-        self.b1 = np.reshape(self.b1, (self.num_neurons_l1, 1))
-        self.w2 = np.loadtxt('w2.txt', delimiter = ',')
-        self.b2 = np.loadtxt('b2.txt', delimiter = ',')
-        self.b2 = np.reshape(self.b2, (self.num_neurons_l2, 1))
+    def test_accuracy(self, X_test, Y_test):
+        accu_count = 0
+        for i in range(X_test.shape[0]):
+            prev_layer_data = X_test[i]
+            for layer in self.layer_list:
+                prev_layer_data = layer.forward_pass(prev_layer_data)
+            #After forward passing, prev_layer_data has the actual output
+            idx_max = prev_layer_data.argmax(axis = 0)
+            if Y_test[i, idx_max] == 1.0:
+                accu_count += 1
+        print("Current accuracy of network: %.5f" % (accu_count/X_test.shape[0]))
+            

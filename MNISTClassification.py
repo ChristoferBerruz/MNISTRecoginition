@@ -1,10 +1,10 @@
 import os
 import sys
 import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.utils import shuffle
+from Layer import Layer
 from NN import NN
+from ActivationTools import ActivationType
+import numpy as np
 
 def loadMatrices(): #Loading images 
     #Defining globals to be updated
@@ -32,35 +32,11 @@ def loadMatrices(): #Loading images
 
 def main():
     trainX, trainY, testX, testY = loadMatrices()
-    DigitNN = NN(200, 10, 784)
-    DigitNN.train_by_SGD(trainX, trainY, regularized = True, dropout = True, save = False)
-    DigitNN.test_model(testX, testY)
-
-def plot_comparison(trainX, trainY, testX, testY):
-    epochs = [25, 50, 100, 150]
-    l1_vals = [25, 50, 100, 150]
-    fig, a = plt.subplots(2, 2)
-    for j in range(len(l1_vals)):
-        sgd = []
-        mini_batch = []
-        for i in range(len(epochs)):
-            l1 = l1_vals[j]
-            epoch = epochs[i]
-            nn = NN(l1, 10, 784)
-            nn.train_by_SGD(trainX, trainY, 0.01, epoch)
-            acc1 = nn.test_model(testX, testY)
-            sgd.append(acc1)
-            nn = NN(l1, 10, 784)
-            nn.train_by_MBGD(trainX, trainY, 0.01, epoch)
-            acc2 = nn.test_model(testX, testY)
-            mini_batch.append(acc2)
-        idx = 0
-        if j >= 2:
-            idx = 1
-        a[idx][j%2].scatter(epochs, sgd, label = 'SGD')
-        a[idx][j%2].scatter(epochs, mini_batch, label = 'Mini Batch')
-        a[idx][j%2].set_title('Neurons in Hidden Layer = %d'%l1_vals[j])
-    plt.legend()
-    plt.show()
+    HiddenLayer = Layer(784, 30)
+    OuputLayer = Layer(30, 10, ActivationType.SOFTMAX, True)
+    layers = [HiddenLayer, OuputLayer]
+    Digit_Classifier = NN(layers)
+    Digit_Classifier.Train(trainX, trainY)
+    Digit_Classifier.test_accuracy(testX, testY)
 
 if __name__ == '__main__':main()

@@ -22,4 +22,4 @@ class ActivationFunctions(object):
 
     def softmax(s1):
         a = np.exp(s1)
-        return a/np.sum(a)
+        return a/np.sum(a, axis = 1, keepdims = True) #Needed for Batch based

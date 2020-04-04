@@ -1,17 +1,66 @@
 from GradientDecentType import GradientDecentType
+from Layer import Layer
+from ActivationTools import ActivationType
 from sklearn.utils import shuffle
 class NN(object):
     """Neural Network"""
 
-    def __init__(self, layer_list):
+    '''
+    def init_by_list(self, layer_list):
         """
-        A neural network is a list of layers. With last layer being last_layer = True
+        Initializing a neural network
 
         Parameters:
         - layer_list: list[Layer]
             Layers to build the network
         """
         self.layer_list = layer_list
+
+
+    def init_by_layerfunc(self, numneuron_func, input_size):
+        """
+        Different initialization for NN
+
+        Parameters:
+        - numneuron_func : list[(int, ActivationType)]
+            List of tuples such that each tupple specifies the number of neurons in each layer with the activation function of the layer.
+        - input_size: int
+            Size of the input of the Network
+        """
+        lastindex = len(numneuron_func) - 1
+        layers = []
+        for idx, pair in enumerate(numneuron_func):
+            num_neurons, activation_function = pair
+            layer = Layer(input_size, num_neurons, activation_function, idx == lastindex)
+            input_size = num_neurons
+            Layers.append(layer)
+        self.init_by_list(layers)
+    '''
+
+
+    def __init__(self, numneurons_list, activationType_allLayers, input_size):
+        """
+        Main constructor for NN.
+
+        Parameters:
+        - numneurons_list: list[int]
+            List of integers where each integer specifies the number of neurons at that layer
+        - activationType_allLayer: ActivationType
+            ActivationType to be applied to ALL hidden layers
+        - input_size:
+            Input size of the network itself
+        """
+        lastindex = len(numneurons_list) - 1
+        layers = []
+        for idx, num_neuron in enumerate(numneurons_list):
+            layer = None
+            if idx == lastindex:
+                layer = Layer(input_size, num_neuron, ActivationType.SOFTMAX, True)
+            else:
+                layer = Layer(input_size, num_neuron, activationType_allLayers, False)
+            input_size = num_neuron
+            layers.append(layer)
+        self.layer_list = layers
 
 
     def Train(self, X, Y, GradType = GradientDecentType.STOCHASTIC, batch_size = 10, epochs = 100, learning_rate = 0.01):

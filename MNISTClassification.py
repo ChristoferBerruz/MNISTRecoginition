@@ -4,6 +4,7 @@ import cv2
 from Layer import Layer
 from NN import NN
 from ActivationTools import ActivationType
+from GradientDecentType import GradientDecentType
 import numpy as np
 
 def loadMatrices(): #Loading images 
@@ -32,11 +33,11 @@ def loadMatrices(): #Loading images
 
 def main():
     trainX, trainY, testX, testY = loadMatrices()
-    HiddenLayer = Layer(784, 30)
-    OuputLayer = Layer(30, 10, ActivationType.SOFTMAX, True)
-    layers = [HiddenLayer, OuputLayer]
-    Digit_Classifier = NN(layers)
-    Digit_Classifier.Train(trainX, trainY)
+    #HiddenLayer = Layer(784, 50, ActivationType.RELU)
+    #OuputLayer = Layer(50, 10, ActivationType.SOFTMAX, True)
+    #layers = [HiddenLayer, OuputLayer]
+    Digit_Classifier = NN([50, 10], ActivationType.SIGMOID, 784)
+    Digit_Classifier.Train(trainX, trainY, epochs = 100, GradType = GradientDecentType.MINIBATCH)
     Digit_Classifier.test_accuracy(testX, testY)
 
 if __name__ == '__main__':main()

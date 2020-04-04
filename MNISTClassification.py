@@ -27,17 +27,16 @@ def loadMatrices(): #Loading images
         testY[i, y] = 1.0
         test[i] = cv2.imread('C:/Users/chris/Downloads/Data/Data/Test10000/{}'.format(fname), 0)/255.0
         i += 1
-    trainX = train.reshape(train.shape[0], train.shape[1]*train.shape[2], 1)
-    testX = test.reshape(test.shape[0],test.shape[1]*test.shape[2],1)
+    trainX = train.reshape(train.shape[0], train.shape[1]*train.shape[2])
+    testX = test.reshape(test.shape[0],test.shape[1]*test.shape[2])
+    testY = testY.reshape(testY.shape[0],testY.shape[1]*testY.shape[2])
+    trainY = trainY.reshape(trainY.shape[0],trainY.shape[1]*trainY.shape[2])
     return trainX, trainY, testX, testY
 
 def main():
     trainX, trainY, testX, testY = loadMatrices()
-    #HiddenLayer = Layer(784, 50, ActivationType.RELU)
-    #OuputLayer = Layer(50, 10, ActivationType.SOFTMAX, True)
-    #layers = [HiddenLayer, OuputLayer]
-    Digit_Classifier = NN([50, 10], ActivationType.SIGMOID, 784)
-    Digit_Classifier.Train(trainX, trainY, epochs = 100, GradType = GradientDecentType.MINIBATCH)
+    Digit_Classifier = NN([30, 10], ActivationType.RELU, 784)
+    Digit_Classifier.Train(trainX, trainY, epochs = 10, GradType = GradientDecentType.MINIBATCH, learning_rate = 0.001, optimizer = 'Adam')
     Digit_Classifier.test_accuracy(testX, testY)
 
 if __name__ == '__main__':main()

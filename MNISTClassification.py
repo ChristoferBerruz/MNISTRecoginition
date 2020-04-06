@@ -35,8 +35,8 @@ def loadMatrices(): #Loading images
 
 def main():
     trainX, trainY, testX, testY = loadMatrices()
-    Digit_Classifier = NN([30, 10], ActivationType.RELU, 784)
-    Digit_Classifier.Train(trainX, trainY, epochs = 10, GradType = GradientDecentType.MINIBATCH, learning_rate = 0.001, optimizer = 'Adam')
+    Digit_Classifier = NN([50, 10], ActivationType.RELU, 784)
+    Digit_Classifier.Train(trainX, trainY, epochs = 10, batch_size = 10, GradType = GradientDecentType.MINIBATCH, drop_out = True, learning_rate= 0.01, optimizer = 'Adam', batchnorm = True)
     Digit_Classifier.test_accuracy(testX, testY)
 
 if __name__ == '__main__':main()

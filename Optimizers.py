@@ -51,3 +51,6 @@ class DefaultOptimizer(object):
 
     def newBias(self, b, gradb, learning_rate):
         return b - learning_rate*gradb
+
+    def newTheta(self, theta, gradtheta, learning_rate):
+        return theta - learning_rate*gradtheta

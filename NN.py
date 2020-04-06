@@ -51,6 +51,12 @@ class NN(object):
         - input_size:
             Input size of the network itself
         """
+        self.batchnorm = False
+        self.drop_out = False
+        self.optimizer = ''
+        self.learning_rate = 0.0
+        self.epochs = 0
+        self.drop_percent = 0.2
         lastindex = len(numneurons_list) - 1
         layers = []
         for idx, num_neuron in enumerate(numneurons_list):
@@ -64,7 +70,7 @@ class NN(object):
         self.layer_list = layers
 
 
-    def Train(self, X, Y, GradType = GradientDecentType.STOCHASTIC, batch_size = 10, epochs = 100, learning_rate = 0.01, optimizer = ''):
+    def Train(self, X, Y, GradType = GradientDecentType.STOCHASTIC, batch_size = 10, drop_out = False, drop_percent = 0.2, epochs = 100, learning_rate = 0.01, optimizer = '', batchnorm = False):
         """
         Trains the network by Gradient Descent
 
@@ -77,19 +83,31 @@ class NN(object):
             Specifies which Gradient Descent Variation to use
         - batch_size: float (optional)
             Batch size
+        - drop_out: bool
+            Whether to perform dropout or not
         - epochs: int
             Number of epochs
         - learning_rate:float
             Learning rate of algortihm
+        - optimizer: str
+            'Adam' or ''
+        - batchnorm: bool
+            Whether to perform batch normalization or not
         """
+        self.batchnorm = batchnorm
+        self.drop_out = drop_out
+        self.optimizer = optimizer
+        self.learning_rate =  learning_rate
+        self.epochs = epochs
+        self.drop_percent = drop_percent
         if(GradType == GradientDecentType.STOCHASTIC):
             batch_size = 1
         if(GradType == GradientDecentType.BATCH):
             batch_size = X.shape[0]
-        self.mini_batch(X, Y, epochs, learning_rate, batch_size, optimizer = optimizer)
+        self.mini_batch(X, Y, epochs, learning_rate, batch_size, drop_out = drop_out, optimizer = optimizer, batchnorm = batchnorm)
 
 
-    def mini_batch(self, X, y, epochs, learning_rate, batch_size, optimizer):
+    def mini_batch(self, X, y, epochs, learning_rate, batch_size, drop_out, optimizer, batchnorm):
         """
         All versions of Gradient Descent can be thought as special cases of the Mini-Batch algorithm.
 
@@ -104,27 +122,45 @@ class NN(object):
             Learning rate to be used.
         - batch_size = int
             Batch size to be used.
+        - drop_out: bool
+            Whether to perform drop_out
+        - optimizer: str
+            'Adam' or '' 
+        - batchnorm: bool
+            Whether to perform batch normalization or not
         """
         last_layer = self.layer_list[-1] #Pointer to last layer
         for epoch in range(epochs):
             X, y = shuffle(X, y) #Shuffling data to conserve i.i.d
+
+            #------------------Creating dropout matrices if needed be ----------------------#
+            if drop_out:
+                for idx, layer in enumerate(self.layer_list):
+                    if idx != last_layer:
+                        layer.drop_out = True
+                        DropM = np.random.binomial(1, (1-self.drop_percent), (layer.num_neurons))/(1-self.drop_percent)
+                        layer.dropM = DropM
+
+            #----------------------------------Batches-------------------------------------#
             for batch in np.arange(0, X.shape[0], batch_size):
                 D = X[batch:batch+batch_size, :]
                 prev_layer_data = D
-                #Forward passing to all layers
+
+                #Forward passing
                 for layer in self.layer_list:
-                    prev_layer_data = layer.forward_pass(prev_layer_data)
+                    prev_layer_data = layer.forward_pass(prev_layer_data, batchnorm = batchnorm)
           
                 #Back propagation
                 next_layer_data = y[batch:batch+batch_size, :]
                 expected = y[batch:batch+batch_size, :]
-                #print(y.shape, type(y), "Back propagating", expected.shape)
                 for k in range(len(self.layer_list)-1, -1, -1):
                     layer = self.layer_list[k]
                     next_layer_data = layer.back_propagate(next_layer_data)
-                    layer.update_gradients()
+                    layer.update_gradients() #Updating gradients
                 if batch %10 == 0:
                     print("Cummulative iteration = %s, Loss = %.7f" % (batch, last_layer.calculate_loss(expected)))
+
+                #Updating parameters of each layer
                 for layer in self.layer_list:
                     layer.update_thetas(learning_rate, optimizer)
         print("Done training!")
@@ -135,10 +171,14 @@ class NN(object):
         for i in range(X_test.shape[0]):
             prev_layer_data = X_test[i:i+1, :]
             for layer in self.layer_list:
-                prev_layer_data = layer.forward_pass(prev_layer_data)
+                prev_layer_data = layer.forward_pass(prev_layer_data, mode = 'Test', batchnorm=self.batchnorm)
             #After forward passing, prev_layer_data has the actual output
             idx_max = prev_layer_data.argmax(axis = 1)
             if Y_test[i, idx_max] == 1.0:
                 accu_count += 1
-        print("Current accuracy of network: %.5f" % (accu_count/X_test.shape[0]))
+        print("------------------- Network Result ---------------------")
+        print("Layers: ", list(map(str, self.layer_list)))
+        print("Dropout : %s\nOptimizer : %s\nLearning rate: %.6f\nEpochs: %d\nBatch Normalization: %s" 
+              % (self.drop_out, self.optimizer, self.learning_rate, self.epochs, self.batchnorm ))
+        print("Accuracy of network: %.5f" % (accu_count/X_test.shape[0]))
             

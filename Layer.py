@@ -1,6 +1,7 @@
 import numpy as np
 from ActivationTools import ActivationType
 from ActivationTools import ActivationFunctions as Functions
+from Optimizers import Adam, DefaultOptimizer
 class Layer(object):
     """Layer class"""
 
@@ -22,26 +23,49 @@ class Layer(object):
         - drop_percent: float
             Percentage of neurons to be randomly shut down during training
         """
-        self.W = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons, input_size))
-        self.b = np.random.uniform(low = -0.1, high = 0.1, size = (num_neurons, 1))
+        self.W = np.random.uniform(low = -0.1, high = 0.1, size = (input_size, num_neurons))
+        self.b = np.random.uniform(low = -0.1, high = 0.1, size = (1, num_neurons))
         self.num_neurons = num_neurons
         self.input_size = input_size
         self.Activation = Activation
-        self.a = np.zeros((num_neurons, 1)) #The output of the layer
+        self.a = None #The output of the layer
         self.gradW  = np.zeros(shape = self.W.shape)
         self.gradb = np.zeros(shape = self.b.shape)
         self.last_layer = last_layer
-        self.delta = np.zeros(shape = self.b.shape)
-        self.updating_count = 1
+        self.delta = None
         self.input_data = None
+        self.Optimizer = DefaultOptimizer() #We use the otimizer to calculate new parameters
+        self.batchnorm = False
+        self.dropM = None
+        self.drop_percent = drop_percent
+        self.drop_out = drop_out
+        self.mode = 'Train'
+        #------------------------------------ for Batch Normalization --------------------------------#
+        if not last_layer:
+            self.gamma = np.random.uniform(low = -0.1, high = 0.1, size = self.b.shape)
+            self.beta = np.random.uniform(low = -0.1, high = 0.1, size = self.b.shape)
+            self.sihat = None
+            self.sb = None
+            self.variance = None
+            self.mean = None
+            self.deltaBN = None
+            self.gradGamma = np.zeros(shape = self.gamma.shape)
+            self.gradBeta = np.zeros(shape = self.beta.shape)
+            self.cumulative_mean = 0
+            self.cumulative_variance = 0
+            self.EPSILON = 10**(-6)
 
 
-    def forward_pass(self, input_data):
+    def forward_pass(self, input_data, mode = 'Train', batchnorm = False):
         """
         Forward passing data.
         Parameters:
         - input_data: np.ndarray
             Represents data being passed to the layer. Once we forward pass, the layer stores the value as a property
+        - mode: str
+            'Train' if in training stage. Test otherwise
+        - batchnotm: bool
+            Whether to perform bacth normalization
 
         Returns:
         - self.a: np.ndarray
@@ -52,7 +76,26 @@ class Layer(object):
             Raised when condition ActivationType == SIGMOID and laster_layer == True is not valid
         """
         self.input_data = input_data
-        s1 = self.W@input_data + self.b
+        s1 = input_data@self.W + self.b
+        self.batchnorm = batchnorm
+
+
+        #-------------------------- for batch normalization --------------------------------#
+        if (not self.last_layer) and self.batchnorm:
+            if mode == 'Train':
+                self.variance = np.var(s1, axis = 0, keepdims = True, dtype = np.float64)
+                self.mean = np.mean(s1, axis = 0, keepdims = True)
+                self.cumulative_mean = 0.9*self.cumulative_mean + (1-0.9)*self.mean
+                self.cumulative_variance = 0.9*self.cumulative_variance + (1-0.9)*self.variance
+            else:
+                self.mean = self.cumulative_mean
+                self.variance = self.cumulative_variance
+            self.sihat = (s1 - self.mean)/np.sqrt(self.variance + self.EPSILON)
+            self.sb = self.gamma*self.sihat + self.beta
+            s1 = self.sb
+
+
+        #------------------------- Calculating activations ------------------------------#
         if(self.Activation == ActivationType.SIGMOID):
             self.a = Functions.sigmoid(s1)
         elif(self.Activation == ActivationType.RELU):
@@ -63,6 +106,13 @@ class Layer(object):
             self.a = Functions.softmax(s1)
         else:
             raise Exception("Please change boolean parameter or activation type")
+
+
+        #Zeroing out some weights
+        if (not self.last_layer) and self.drop_out and (mode == 'Train'):
+            self.a = self.a * self.dropM
+
+
         return self.a
 
 
@@ -76,10 +126,13 @@ class Layer(object):
         Returns
             weighted deltas of self as np.ndarray
         """
+
+        #------------------------ Back propagating --------------------------#
         if(self.Activation == ActivationType.SIGMOID):
             self.delta = weighted_deltas*self.a*(1-self.a)
         elif(self.Activation == ActivationType.RELU):
-            self.delta = weighted_deltas*np.where(self.a >= 0, 1, 0)
+            derivative = np.where(self.a >= 0, 1, 0) if not self.batchnorm else np.where(self.a > self.EPSILON, 1, self.EPSILON) #Just for batch normalization
+            self.delta = weighted_deltas*derivative
         elif(self.Activation == ActivationType.TANH):
             self.delta = weighted_deltas*(1-self.a**2)
         elif(self.Activation == ActivationType.SOFTMAX and self.last_layer):
@@ -87,7 +140,16 @@ class Layer(object):
             self.delta = (self.a - weighted_deltas)
         else:
             raise Exception("Please change last_layer or activation type")
-        return self.W.T@self.delta
+        if(not self.last_layer) and self.drop_out:
+            self.delta = self.delta * self.dropM
+        if self.last_layer or (not self.batchnorm):
+            return (self.W@self.delta.T).T
+        
+
+        #------------------------- Calculating deltabn and back propagate ---------------------#
+        denominator = self.input_data.shape[0]*np.sqrt(self.variance + 10**(-8))
+        self.deltaBN = self.delta*self.gamma*(self.input_data.shape[0] - 1 - self.sihat**2)/denominator
+        return (self.W@self.deltaBN.T).T
 
 
     def update_gradients(self, regularized = True, reg_val = 0.01):
@@ -101,14 +163,21 @@ class Layer(object):
         - reg_val: float
             Regularization value
         """
-        self.updating_count += 1
-        self.gradW += self.delta@self.input_data.T
-        self.gradb += self.delta
+
+        if self.last_layer or (not self.batchnorm):
+            self.gradW = (self.input_data.T@self.delta)/self.input_data.shape[0] #Average gradient
+            self.gradb = np.mean(self.delta, axis = 0, keepdims = True) #average gradient
+        else:
+            #-------------------------- for Batch Norm --------------------------#
+            self.gradW = (self.input_data.T@self.deltaBN)/self.input_data.shape[0]
+            self.gradb = np.mean(self.deltaBN, axis = 0, keepdims = True)
+            self.gradBeta = np.mean(self.delta, axis = 0, keepdims = True)
+            self.gradGamma = np.mean(self.sihat*self.delta, axis = 0, keepdims = True)
         if regularized:
             self.gradW += reg_val*self.W
 
 
-    def update_thetas(self, learning_rate = 0.01):
+    def update_thetas(self, learning_rate = 0.01, optimizer = ''):
         """
         Update the W matrix and biases for the layer. Once we update thetas, the gradW and gradb are set to zero.
         We also reset the count of how many times we acumulated the gradients.
@@ -116,13 +185,18 @@ class Layer(object):
         Parameters:
         - learning_rate: float
             Learning rate to use to update thetas
+        - optimizer: str
+            Which optimizer to use. Empty string is default
         """
-        self.W += -learning_rate*self.gradW/self.updating_count
-        self.b += -learning_rate*self.gradb/self.updating_count
-        self.gradW = np.zeros(shape = self.W.shape)
-        self.gradb = np.zeros(shape = self.b.shape)
-        self.updating_count = 0
-
+        createInstance = True #We only create one instance of the Optimizer
+        if createInstance and optimizer == 'Adam': #Taking advantage of lazy and
+            self.Optimizer = Adam()
+            createInstance = False
+        self.W = self.Optimizer.newWeight(self.W, self.gradW, learning_rate)
+        self.b = self.Optimizer.newBias(self.b, self.gradb, learning_rate)
+        if (not self.last_layer) and self.batchnorm:
+            self.gamma += -learning_rate*self.gradGamma
+            self.beta += -learning_rate*self.gradBeta
 
     def calculate_loss(self, y_expected):
         """
@@ -147,3 +221,19 @@ class Layer(object):
 
     def loss(self, y_expected):
         return np.sum(-y_expected*np.log(self.a))
+
+    def __str__(self):
+        """
+        String representation of layer object
+        """
+        layer_type = "Output" if self.last_layer else "Hidden"
+        funcType = ''
+        if self.Activation == ActivationType.SIGMOID:
+            funcType = "SIGMOID"
+        elif self.Activation ==  ActivationType.RELU:
+            funcType = "RELU"
+        elif self.Activation == ActivationType.SOFTMAX:
+            funcType = "SOFTMAX"
+        else:
+            funcType = "TANH"
+        return "(Type: %s, Activation: %s, Size: %d)"%(layer_type, funcType, self.num_neurons)
